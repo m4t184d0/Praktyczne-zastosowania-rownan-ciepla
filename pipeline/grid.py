@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 import numpy as np
-import matplotlib.pyplot as plt
 
 class Grid:
     def _load_config(self,path):

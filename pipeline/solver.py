@@ -1,40 +1,52 @@
 import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
-from matplotlib.animation import FuncAnimation
-import matplotlib
-import matplotlib.pyplot as plt
-
-# Debug okna z animacja
-matplotlib.use('TkAgg')
 
 from grid import Grid
 
 
 class Solver:
     def __init__(self, grid_obj):
-        self.hx = grid_obj.hx
-        self.hy = grid_obj.hy
-        self.ht = grid_obj.ht
+        # Ładowanie configu
+        self.cfg = grid_obj.config
+
+        # Skróty dla czytelności (żeby nie pisać ciągle self.cfg['...'])
+        self.c_sim = self.cfg['config']
+        self.c_mat = self.cfg['materials']
+        self.c_phys = self.cfg['physics']
+        self.c_bound = self.cfg['boundaries']
+        self.c_set = self.cfg['simulation']
+
+        self.hx = self.c_sim['hx']
+        self.hy = self.c_sim['hy']
+        self.ht = self.c_sim['ht']
         self.nx = grid_obj.nx
         self.ny = grid_obj.ny
         self.grid = grid_obj.material_grid
         self.N = self.nx * self.ny
 
     def mapa_alfa(self):
-        # TODO wpisać w config
         grid_plaski = self.grid.flatten()
-        alfa_powietrze = 0.00025
-        alfa_sciana_prz = 0.00000044
-        alfa_kartongips = 0.00000008
-        alfa_sciana_izo = 0.0000005
-        alfa_okno = 0.0000004
 
+        # Pobieranie wartości z configu
+        alfa_powietrze = self.c_mat['0']['alpha']
+        alfa_sciana_izo = self.c_mat['1']['alpha']
+        alfa_sciana_prz = self.c_mat['2']['alpha']
+        alfa_kartongips = self.c_mat['3']['alpha']
+        alfa_okno = self.c_mat['4']['alpha']
+        # Drzwi i grzejnik też mogą mieć swoją alfę jeśli są w configu
+        alfa_drzwi = self.c_mat['5']['alpha']
+        alfa_grzejnik = self.c_mat['6']['alpha']
+
+        # Budowanie mapy dokładnie tak jak w Twoim kodzie
         alfa_map = np.ones(self.N) * alfa_powietrze
         alfa_map[grid_plaski == 1] = alfa_sciana_izo
         alfa_map[grid_plaski == 2] = alfa_sciana_prz
         alfa_map[grid_plaski == 3] = alfa_kartongips
         alfa_map[grid_plaski == 4] = alfa_okno
+        alfa_map[grid_plaski == 5] = alfa_drzwi
+        alfa_map[grid_plaski == 6] = alfa_grzejnik
+
         return alfa_map
 
     def D2(self, N):
@@ -53,11 +65,18 @@ class Solver:
         alfa_map = self.mapa_alfa()
 
         # Równanie (11): lambda_material / lambda_air
-        lambda_air = 0.025
-        K_map = np.ones(self.N) * (0.03 / lambda_air)  # Izolacja
-        K_map[grid_flat == 2] = 0.5 / lambda_air  # Cegła
-        K_map[grid_flat == 4] = 0.8 / lambda_air  # Okno
-        K_map[grid_flat == 5] = 0.2 / lambda_air  # Drzwi
+        # Pobieramy lambdy z configu
+        lambda_air = self.c_mat['0']['lambda']
+        lambda_izo = self.c_mat['1']['lambda']
+        lambda_cegla = self.c_mat['2']['lambda']
+        lambda_okno = self.c_mat['4']['lambda']
+        lambda_drzwi = self.c_mat['5']['lambda']
+
+        # Twoja logika budowania K_map
+        K_map = np.ones(self.N) * (lambda_izo / lambda_air)  # Izolacja jako domyślne tło? (tak było w kodzie)
+        K_map[grid_flat == 2] = lambda_cegla / lambda_air  # Cegła
+        K_map[grid_flat == 4] = lambda_okno / lambda_air  # Okno
+        K_map[grid_flat == 5] = lambda_drzwi / lambda_air  # Drzwi
 
         # Krawedzie
         idx_gora = np.arange(0, self.nx)
@@ -67,11 +86,18 @@ class Solver:
 
         wszystkie_brzegi_idx = np.unique(np.concatenate([idx_gora, idx_dol, idx_lewo, idx_prawo]))
 
-        # Temperatrury Celcjusz
-        T_zew_map = np.ones(self.N) * -5.0  # na zewnątrz TODO dodać implementację pogody
-        T_zew_map[idx_lewo] = 19.0  # sąsiad po lewo
-        T_zew_map[idx_prawo] = 19.0  # sąsiad po prawo
-        T_zew_map[idx_dol] = 10.0  # klatka schodowa
+        # Temperatrury Celcjusz z configu
+        t_out = self.c_bound['temp_outside']
+        t_left = self.c_bound['temp_left']
+        t_right = self.c_bound['temp_right']
+        t_bottom = self.c_bound['temp_bottom']
+        t_top = self.c_bound['temp_top']
+
+        T_zew_map = np.ones(self.N) * t_out  # na zewnątrz
+        T_zew_map[idx_lewo] = t_left  # sąsiad po lewo
+        T_zew_map[idx_prawo] = t_right  # sąsiad po prawo
+        T_zew_map[idx_dol] = t_bottom  # klatka schodowa
+        T_zew_map[idx_gora] = t_top  # góra (jeśli zdefiniowana)
 
         # Zmiana na Kelwiny
         T_zew_kelwin = T_zew_map + 273.15
@@ -89,7 +115,7 @@ class Solver:
         A = A.tolil()
 
         dx = self.hx
-        # Warunki brzegowe Robina
+        # Warunki brzegowe Robina - DOKŁADNIE TAK JAK MIAŁEŚ
         A[idx_gora, :] = 0.0
         A[idx_gora, idx_gora] = 1.0 + K_map[idx_gora] * dx
         A[idx_gora, idx_gora + self.nx] = -1.0
@@ -116,23 +142,24 @@ class Solver:
         maska_grzejniki = (grid_flat == 6)
         maska_powietrze = (grid_flat == 0)
 
-        # Stałe TODO wpisać w config
-        p_atm = 101325.0
-        r_pow = 287.05
-        c_pow = 1005.0
+        # Stałe fizyczne z configu
+        p_atm = self.c_phys['p_atm']
+        r_pow = self.c_phys['R_air']
+        c_pow = self.c_phys['c_air']
+        rho_pow = self.c_phys['rho_air']
 
-        P_total = 1000.0
+        # Moc z configu (Heater - material 6)
+        P_total = self.c_mat['6']['power_total_watts']
 
-        # Moc grzejnika na pixel TODO implementacja termostatu
+        # Moc grzejnika na pixel
         n_pix_grzejnik = np.sum(maska_grzejniki)
         pole_pixela = self.hx * self.hy
         P_pixel = P_total / n_pix_grzejnik if n_pix_grzejnik > 0 else 0
         wsp_mocy = (P_pixel * r_pow) / (p_atm * pole_pixela * c_pow)
 
         # Warunek początkowy
-        T = np.ones(self.N) * (19.0 + 273.15)
-
-        rho_pow = 1.2  # gęstość (średnia)
+        t_init = self.c_set['initial_temp_c']
+        T = np.ones(self.N) * (t_init + 273.15)
 
         historia = []
         historia_temp_czujnika = []
@@ -140,8 +167,12 @@ class Solver:
         historia_energii = []
         calkowita_energia_J = 0
 
-        czas_symulacji = 12 * 3600
+        czas_symulacji = self.c_set['total_time_h'] * 3600
         liczba_krokow = int(czas_symulacji / self.ht)
+
+        # Cele temperatur z configu
+        target_temp = self.c_set['target_temp_c'] + 273.15
+        eco_temp = self.c_set['eco_temp_c'] + 273.15
 
         # Pętla
         for i in range(liczba_krokow):
@@ -157,14 +188,15 @@ class Solver:
             temp_czujnika = T[idx_czujnika]
 
             if strategia == 'A':
-                # Stałe grzanie na 21 stopni
-                S_termostat = 21.0 + 273.15
+                # Stałe grzanie
+                S_termostat = target_temp
             else:
                 # Strategia B: wychłodzenie (8h) + dogrzewanie (4h)
+                # Zakładam że 8h to 2/3 czasu symulacji, jeśli chcesz na sztywno 8h to wpisz 8*3600
                 if czas_kroku < 8 * 3600:
-                    S_termostat = 7.0 + 273.15
+                    S_termostat = eco_temp
                 else:
-                    S_termostat = 21.0 + 273.15
+                    S_termostat = target_temp
 
             # Termostat + Grzejnik
             if temp_czujnika < S_termostat:
@@ -197,83 +229,3 @@ class Solver:
         }
 
 
-grid_obj = Grid()
-solver = Solver(grid_obj)
-
-print("Symulacja Strategii A (Ciągłe grzanie)...")
-wyniki_A = solver.solve(strategia='A')
-
-print("Symulacja Strategii B (Oszczędzanie)...")
-wyniki_B = solver.solve(strategia='B')
-
-# --- WYKRESY PORÓWNAWCZE ---
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
-
-v_min, v_max = -5, 40
-
-im1 = ax1.imshow(wyniki_A['historia'][0], cmap='inferno', vmin=v_min, vmax=v_max)
-ax1.set_title("Strategia A: Ciągłe grzanie")
-plt.colorbar(im1, ax=ax1, label="Temp [°C]")
-
-im2 = ax2.imshow(wyniki_B['historia'][0], cmap='inferno', vmin=v_min, vmax=v_max)
-ax2.set_title("Strategia B: Wychłodzenie + Dogrzewanie")
-plt.colorbar(im2, ax=ax2, label="Temp [°C]")
-
-# Zaznaczamy czujnik na obu wykresach (środek siatki)
-cx, cy = solver.nx // 2, solver.ny // 2
-ax1.plot(cx, cy, 'go', markersize=8, label='Czujnik')
-ax2.plot(cx, cy, 'go', markersize=8)
-
-# Tekst z czasem i energią
-txt_time = fig.suptitle("", fontsize=16)
-
-
-def update(frame):
-    # Aktualizacja obrazów
-    im1.set_array(wyniki_A['historia'][frame])
-    im2.set_array(wyniki_B['historia'][frame])
-
-    # Aktualizacja nagłówka
-    czas_min = (frame * 10 * solver.ht) / 60  # 10 bo historia co 10 kroków
-    txt_time.set_text(f"Czas symulacji: {czas_min:.1f} min\n"
-                      f"Energia A: {wyniki_A['energia'][frame]:.2f} kWh | "
-                      f"Energia B: {wyniki_B['energia'][frame]:.2f} kWh")
-
-    return [im1, im2, txt_time]
-
-
-# Uruchomienie animacji
-# frames to długość krótszej historii (na wypadek różnic)
-num_frames = min(len(wyniki_A['historia']), len(wyniki_B['historia']))
-ani = FuncAnimation(fig, update, frames=num_frames, interval=50, blit=False)
-
-plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
-
-t_os = np.linspace(0, 12, len(wyniki_A['temp']))
-# 1. Wykres Temperatury
-plt.subplot(3, 1, 1)
-plt.plot(t_os, wyniki_A['temp'], label='Strategia A (Stała)')
-plt.plot(t_os, wyniki_B['temp'], label='Strategia B (Wyłączanie)', linestyle='--')
-plt.axhline(21, color='red', alpha=0.3, label='Cel')
-plt.ylabel('Temp. na czujniku [°C]')
-plt.legend()
-
-# 2. Wykres Komfortu (Odchylenie standardowe)
-plt.subplot(3, 1, 2)
-plt.plot(t_os, wyniki_A['komfort'], label='Komfort A')
-plt.plot(t_os, wyniki_B['komfort'], label='Komfort B')
-plt.ylabel('Odchylenie $\sigma_u$ [°C]')
-plt.title('Nierównomierność rozkładu (im mniej tym lepiej)')
-plt.legend()
-
-# 3. Wykres Zużycia Energii
-plt.subplot(3, 1, 3)
-plt.plot(t_os, wyniki_A['energia'], label=f"Suma A: {wyniki_A['total_kWh']:.2f} kWh")
-plt.plot(t_os, wyniki_B['energia'], label=f"Suma B: {wyniki_B['total_kWh']:.2f} kWh")
-plt.ylabel('Energia [kWh]')
-plt.xlabel('Czas [h]')
-plt.legend()
-
-plt.tight_layout()
-plt.show()

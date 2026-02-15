@@ -1,4 +1,10 @@
 {
+  "simulation": {
+    "total_time_h": 12,
+    "initial_temp_c": 19.0,
+    "target_temp_c": 21.0,
+    "eco_temp_c": 7.0
+  },
   "config": {
     "width_m": 7.8,
     "height_m": 5.8,
@@ -6,21 +12,57 @@
     "hy": 0.1,
     "ht": 60
   },
-  "weather": {
-    "freezing_cold": -20,
-    "cold": -5,
-    "chill": 5
+  "physics": {
+    "p_atm": 101325.0,
+    "R_air": 287.05,
+    "c_air": 1005.0,
+    "rho_air": 1.2
+  },
+  "boundaries": {
+    "temp_outside": -5.0,
+    "temp_left": 19.0,
+    "temp_right": 19.0,
+    "temp_bottom": 10.0,
+    "temp_top": -5.0
   },
   "materials": {
-    "0": {"name": "Air", "lambda": 0.026, "rho": 1.2, "c": 1005},
-    "1": {"name": "Wall_Insul", "lambda": 0.2, "rho": 50, "c": 1000},
-    "2": {"name": "Wall_Brick", "lambda": 0.80, "rho": 1800, "c": 880},
-    "3": {"name": "Drywall", "lambda": 0.17, "rho": 900, "c": 1000},
-    "4": {"name": "Window", "lambda": 0.90, "rho": 2500, "c": 840},
-    "5": {"name": "Door", "lambda": 0.15, "rho": 600, "c": 1500},
-    "6": {"name": "Heater", "lambda": 50.0, "rho": 1.2, "c": 1005}
+    "0": {
+      "name": "Air",
+      "lambda": 0.025,
+      "alpha": 0.00025
+    },
+    "1": {
+      "name": "Wall_Insul",
+      "lambda": 0.03,
+      "alpha": 0.0000005
+    },
+    "2": {
+      "name": "Wall_Brick",
+      "lambda": 0.50,
+      "alpha": 0.00000044
+    },
+    "3": {
+      "name": "Drywall",
+      "lambda": 0.17,
+      "alpha": 0.00000008
+    },
+    "4": {
+      "name": "Window",
+      "lambda": 0.80,
+      "alpha": 0.0000004
+    },
+    "5": {
+      "name": "Door",
+      "lambda": 0.20,
+      "alpha": 0.0000004
+    },
+    "6": {
+      "name": "Heater",
+      "lambda": 50.0,
+      "alpha": 0.00025,
+      "power_total_watts": 1000.0
+    }
   },
-
   "geometry": [
     {"type": 1, "x": [0.0, 1.0], "y": [0.0, 0.4]},
     {"type": 1, "x": [2.3, 3.2], "y": [0.0, 0.4]},
@@ -46,26 +88,7 @@
 
     {"type": 6, "x": [1.1, 2.2], "y": [0.3, 0.8]},
     {"type": 6, "x": [3.3, 4.4], "y": [0.3, 0.8]},
-    {"type": 6, "x": [5.7, 6.2], "y": [3.0, 3.3]},
+    {"type": 6, "x": [5.7, 6.2], "y": [2.9, 3.2]},
     {"type": 6, "x": [5.7, 6.0], "y": [3.3, 3.6]}
-  ],
-
-  "heater": {
-    "watts": {
-      "bathroom": 250,
-      "kitchen": 500,
-      "living_room": 1000,
-      "bedroom": 1000
-    },
-    "thermostat": {
-      "0": 5,
-      "1": 9,
-      "2": 13,
-      "3": 17,
-      "4": 21,
-      "5": 25,
-      "6": 29
-
-    }
-  }
+  ]
 }
