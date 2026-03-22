@@ -10,7 +10,6 @@ class Solver:
         # Ładowanie configu
         self.cfg = grid_obj.config
 
-        # Skróty dla czytelności (żeby nie pisać ciągle self.cfg['...'])
         self.c_sim = self.cfg['config']
         self.c_mat = self.cfg['materials']
         self.c_phys = self.cfg['physics']
@@ -34,11 +33,10 @@ class Solver:
         alfa_sciana_prz = self.c_mat['2']['alpha']
         alfa_kartongips = self.c_mat['3']['alpha']
         alfa_okno = self.c_mat['4']['alpha']
-        # Drzwi i grzejnik też mogą mieć swoją alfę jeśli są w configu
         alfa_drzwi = self.c_mat['5']['alpha']
         alfa_grzejnik = self.c_mat['6']['alpha']
 
-        # Budowanie mapy dokładnie tak jak w Twoim kodzie
+        # Budowanie mapy
         alfa_map = np.ones(self.N) * alfa_powietrze
         alfa_map[grid_plaski == 1] = alfa_sciana_izo
         alfa_map[grid_plaski == 2] = alfa_sciana_prz
@@ -72,8 +70,8 @@ class Solver:
         lambda_okno = self.c_mat['4']['lambda']
         lambda_drzwi = self.c_mat['5']['lambda']
 
-        # Twoja logika budowania K_map
-        K_map = np.ones(self.N) * (lambda_izo / lambda_air)  # Izolacja jako domyślne tło? (tak było w kodzie)
+        # Logika budowania K_map
+        K_map = np.ones(self.N) * (lambda_izo / lambda_air)  # Izolacja
         K_map[grid_flat == 2] = lambda_cegla / lambda_air  # Cegła
         K_map[grid_flat == 4] = lambda_okno / lambda_air  # Okno
         K_map[grid_flat == 5] = lambda_drzwi / lambda_air  # Drzwi
@@ -115,7 +113,7 @@ class Solver:
         A = A.tolil()
 
         dx = self.hx
-        # Warunki brzegowe Robina - DOKŁADNIE TAK JAK MIAŁEŚ
+        # Warunki brzegowe Robina
         A[idx_gora, :] = 0.0
         A[idx_gora, idx_gora] = 1.0 + K_map[idx_gora] * dx
         A[idx_gora, idx_gora + self.nx] = -1.0
@@ -192,7 +190,6 @@ class Solver:
                 S_termostat = target_temp
             else:
                 # Strategia B: wychłodzenie (8h) + dogrzewanie (4h)
-                # Zakładam że 8h to 2/3 czasu symulacji, jeśli chcesz na sztywno 8h to wpisz 8*3600
                 if czas_kroku < 8 * 3600:
                     S_termostat = eco_temp
                 else:
